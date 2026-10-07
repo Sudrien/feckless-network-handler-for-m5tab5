@@ -28,17 +28,22 @@
 #endif
 #include "esp_hosted_transport_config.h"
 
-#include "settings.h"
 #include "ethernet.h"
 #include <time.h>
 #include "wifi.h"
-#include "heapmap.h"
 #include "wifistore.h"
-#include "portal.h"
-#include "streamprobe.h"
+#include "feckless_net.h"
 #include "freertos/event_groups.h"
 
 static const char *TAG = "tab5_wifi";
+
+/* The application's side of the five places this file used to call a
+ * player module by name. See feckless_net.h for each default. */
+static bool hook_portal_running(void)
+{
+    const feckless_net_hooks_t *h = feckless_net_hooks();
+    return h->portal_running ? h->portal_running() : false;
+}
 
 /* Same three registers usbhost.c writes for USB5V_EN, same reason: the
  * expander parks pins high-Z after reset, so OUT_SET alone leaves the
@@ -313,8 +318,10 @@ static esp_err_t scan_and_log(void)
 static void on_sntp_sync(struct timeval *tv)
 {
     if (!tv) return;
-    const bool ok = settings_note_ntp_reply((int64_t)tv->tv_sec,
-                                            esp_timer_get_time());
+    const feckless_net_hooks_t *h = feckless_net_hooks();
+    const bool ok = h->ntp_reply ? h->ntp_reply((int64_t)tv->tv_sec,
+                                                esp_timer_get_time())
+                                 : true;
     if (ok) s_ntp_synced = true;
     ESP_LOGI(TAG, "NTP sync: %lld%s", (long long)(int64_t)tv->tv_sec,
              ok ? "" : " (implausible vs. last known time; system clock "
@@ -340,7 +347,8 @@ static void on_sntp_sync(struct timeval *tv)
  */
 static void sntp_start(void)
 {
-    if (s_sntp_started || !settings_ntp_enabled()) return;
+    const feckless_net_hooks_t *h = feckless_net_hooks();
+    if (s_sntp_started || !h->ntp_enabled || !h->ntp_enabled()) return;
 
     esp_sntp_config_t cfg = ESP_NETIF_SNTP_DEFAULT_CONFIG_MULTIPLE(
         NTP_SERVER_COUNT,
@@ -422,13 +430,13 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
          * internal heap is where the JPEG engine's descriptors have to
          * come from, and something between boot and the first large
          * cover takes 41 KB of it. */
-        heapmap_log("station up");
+        if (feckless_net_hooks()->heap_note) feckless_net_hooks()->heap_note("station up");
         s_connected = true;
         if (s_join_bits) xEventGroupSetBits(s_join_bits, JOIN_GOT_IP);
         /* The one call site NTP was waiting for. sntp_start() checks the
          * setting and its own started flag, so a reconnect is a no-op. */
         sntp_start();
-        streamprobe_kick();         /* once per boot; see streamprobe.h */
+        if (feckless_net_hooks()->online) feckless_net_hooks()->online();
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_AP_STACONNECTED) {
         if (s_ap_clients < 255) s_ap_clients++;
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_AP_STADISCONNECTED) {
@@ -808,7 +816,7 @@ const char *wifi_auth_name(uint8_t auth) { return authmode((wifi_auth_mode_t)aut
 
 static void connect_saved(bool force)
 {
-    if (!s_up || s_connected || portal_running() || wifistore_count() == 0) return;
+    if (!s_up || s_connected || hook_portal_running() || wifistore_count() == 0) return;
     const TickType_t now = xTaskGetTickCount();
     if (!force && s_last_try && (now - s_last_try) < pdMS_TO_TICKS(RETRY_MS)) return;
     s_last_try = now ? now : 1;
@@ -836,7 +844,7 @@ static void connect_saved(bool force)
         for (int i = 0; i < k; i++) {
             /* The portal may have started while an earlier one timed out;
              * it owns the radio from then on. */
-            if (!s_up || portal_running()) break;
+            if (!s_up || hook_portal_running()) break;
             ESP_LOGI(TAG, "saved network %d of %d in range: %.32s", i + 1, k, cand[i].ssid);
             if (wifi_join(cand[i].ssid, cand[i].secret, WIFI_JOIN_TIMEOUT_MS) == ESP_OK) break;
         }
@@ -878,7 +886,7 @@ static void wifi_task(void *arg)
                               "%lld ms ago", (long long)asked_ago_ms);
             }
             if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY);
-            if (fresh && s_up && !portal_running()) {
+            if (fresh && s_up && !hook_portal_running()) {
                 ESP_LOGW(TAG, "restarting the radio: %s", s_restart_why);
                 s_restart_last_us = esp_timer_get_time();
                 wifi_stop();
@@ -1309,15 +1317,16 @@ esp_err_t wifi_apply_settings(void)
      * lost. */
     if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY);
 
-    const bool want = settings_wifi_enabled();
+    const feckless_net_hooks_t *h = feckless_net_hooks();
+    const bool want = h->wifi_enabled ? h->wifi_enabled() : true;
     esp_err_t err = ESP_OK;
 
     /* The portal is running on this radio; it comes down first, so its
      * server and its AP are not pulled out from under it. Outside the
      * lock, because it waits for the portal's task. */
-    if (!want && s_up && portal_running()) {
+    if (!want && s_up && hook_portal_running()) {
         if (s_lock) xSemaphoreGive(s_lock);
-        portal_stop();
+        if (h->portal_stop) h->portal_stop();
         if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY);
     }
 

@@ -431,7 +431,7 @@ static void t_churn(void)
 
 int main(void)
 {
-    wifistore_init();
+    wifistore_init("test");
 
     t_validation();
     t_replace();

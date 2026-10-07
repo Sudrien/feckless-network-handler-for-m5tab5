@@ -8,7 +8,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "nvsns.h"              /* 6006 */
 #include "wifistore.h"
 
 #ifdef WIFISTORE_HOST
@@ -24,7 +23,13 @@
 static const char *TAG = "tab5_wifi";
 #endif
 
-#define NVS_NAMESPACE   DEFEATIST_NVS_NS     /* 6006: was "wifistore" */
+/* The application's NVS namespace, from wifistore_init(). Under a
+ * launcher every firmware on the board shares one nvs partition, and
+ * only the namespace keeps their data apart, so it is the caller's to
+ * name. NVS allows 15 characters. */
+#define WIFISTORE_DEFAULT_NS "wifistore"
+static char s_ns[16] = WIFISTORE_DEFAULT_NS;
+#define NVS_NAMESPACE   s_ns
 #define NVS_BLOB_KEY    "nets"
 
 /*
@@ -181,15 +186,16 @@ void wifistore_host_forget_ram(void)
     memset(s_net, 0, sizeof(s_net));
     s_count = 0;
     s_ready = false;
-    wifistore_init();
+    wifistore_init(s_ns);
 }
 #endif
 
 /* ---- API ----------------------------------------------------------- */
 
-void wifistore_init(void)
+void wifistore_init(const char *nvs_ns)
 {
     if (s_ready) return;
+    if (nvs_ns && nvs_ns[0]) snprintf(s_ns, sizeof(s_ns), "%s", nvs_ns);
 #ifndef WIFISTORE_HOST
     s_lock = xSemaphoreCreateMutex();
 #endif

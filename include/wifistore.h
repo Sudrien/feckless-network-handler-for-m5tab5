@@ -105,8 +105,13 @@ typedef struct {
  * that will not start because it could not read its network list is a
  * worse program than one that starts with no networks. A missing or
  * unreadable namespace leaves an empty list and logs once.
+ *
+ * `nvs_ns` is the NVS namespace the list lives in, at most 15
+ * characters; NULL or "" is "wifistore". The record is one blob under
+ * the key "nets", so the namespace can be shared with the application's
+ * own keys as long as none of them is called that.
  */
-void wifistore_init(void);
+void wifistore_init(const char *nvs_ns);
 
 /* How many records are held, 0..WIFISTORE_MAX. */
 int wifistore_count(void);

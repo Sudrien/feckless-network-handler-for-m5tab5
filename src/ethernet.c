@@ -22,10 +22,8 @@
 #include "iot_eth_netif_glue.h"
 
 #include "ethernet.h"
-#include "heapmap.h"
+#include "feckless_net.h"
 #include "netlink.h"
-#include "streamprobe.h"
-#include "usbhost.h"
 #include "wifi.h"
 
 static const char *TAG = "tab5_eth";
@@ -281,7 +279,7 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         static bool mapped;
         if (!mapped) {
             mapped = true;
-            heapmap_log("ethernet up");
+            if (feckless_net_hooks()->heap_note) feckless_net_hooks()->heap_note("ethernet up");
         }
         ev = NETLINK_EV_GOT_IP;
     } else if (base == IP_EVENT && id == IP_EVENT_ETH_LOST_IP) {
@@ -307,7 +305,7 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 
     if (rose) {
         ESP_LOGI(TAG, "%s: wired network up; it is the default route", i->name);
-        streamprobe_kick();         /* once per boot; see streamprobe.h */
+        if (feckless_net_hooks()->online) feckless_net_hooks()->online();
         wifi_ntp_start();           /* 5099: NTP on a cable too */
     } else if (was && !netlink_eth_usable(&s)) {
         ESP_LOGI(TAG, "%s: wired network down%s", i->name,
@@ -531,5 +529,10 @@ static esp_err_t attach(eth_if_t *i, iot_eth_driver_t *driver, const char *if_ke
 
 esp_err_t ethernet_init(void)
 {
-    return usbhost_register_class("eth", eth_class_install);
+    const feckless_net_hooks_t *h = feckless_net_hooks();
+    if (!h->usb_register_class) {
+        ESP_LOGE(TAG, "no usb_register_class hook; see feckless_net.h");
+        return ESP_ERR_INVALID_STATE;
+    }
+    return h->usb_register_class("eth", eth_class_install);
 }

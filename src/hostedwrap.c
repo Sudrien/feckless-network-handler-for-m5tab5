@@ -14,7 +14,7 @@
  * station over the USB Ethernet adapter -- no esp_hosted in the path --
  * logged none, with 40 KB of DMA memory free.
  *
- * The link option in main/CMakeLists.txt (--wrap) sends esp_hosted's
+ * The link option in this component's CMakeLists.txt (--wrap) sends esp_hosted's
  * calls here instead, without changing a line of it. PSRAM first, with
  * the original internal allocation as the fallback:
  *
