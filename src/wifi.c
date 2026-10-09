@@ -721,9 +721,13 @@ esp_netif_t *wifi_ap_netif(void) { return s_ap_on ? s_ap_netif : NULL; }
 #define SCAN_ACTIVE_MIN_MS  (100)
 #define SCAN_ACTIVE_MAX_MS  (300)
 
-static int scan_list_locked(wifi_seen_t *out, int max);
+static int scan_list_locked(wifi_seen_t *out, int max, bool quiet);
+static int scan_list(wifi_seen_t *out, int max, bool quiet);
 
-int wifi_scan_list(wifi_seen_t *out, int max)
+int wifi_scan_list(wifi_seen_t *out, int max)       { return scan_list(out, max, false); }
+int wifi_scan_list_quiet(wifi_seen_t *out, int max) { return scan_list(out, max, true); }
+
+static int scan_list(wifi_seen_t *out, int max, bool quiet)
 {
     if (!s_up || !out || max <= 0) return -1;
 
@@ -737,12 +741,12 @@ int wifi_scan_list(wifi_seen_t *out, int max)
      */
     if (!s_join_lock) return -1;
     xSemaphoreTake(s_join_lock, portMAX_DELAY);
-    const int got = scan_list_locked(out, max);
+    const int got = scan_list_locked(out, max, quiet);
     xSemaphoreGive(s_join_lock);
     return got;
 }
 
-static int scan_list_locked(wifi_seen_t *out, int max)
+static int scan_list_locked(wifi_seen_t *out, int max, bool quiet)
 {
     wifi_scan_config_t sc = { 0 };
     sc.show_hidden = true;
@@ -774,8 +778,11 @@ static int scan_list_locked(wifi_seen_t *out, int max)
             out[got].auth = (uint8_t)ap[i].authmode;
             out[got].channel = ap[i].primary;
             out[got].hidden = h;
-            if (h) {
-                hidden++;
+            memcpy(out[got].bssid, ap[i].bssid, sizeof(out[got].bssid));
+            if (h) hidden++;
+            if (quiet) {
+                /* Counted, not listed. */
+            } else if (h) {
                 ESP_LOGI(TAG, "  %4d dBm  ch%-3d  %-10s  (hidden) %02x:%02x:%02x:%02x:%02x:%02x",
                          ap[i].rssi, ap[i].primary, authmode(ap[i].authmode),
                          ap[i].bssid[0], ap[i].bssid[1], ap[i].bssid[2],
@@ -786,9 +793,10 @@ static int scan_list_locked(wifi_seen_t *out, int max)
             }
             got++;
         }
-        ESP_LOGI(TAG, "scan: %d network%s, %d hidden, %d-%d ms a channel",
-                 got, got == 1 ? "" : "s", hidden,
-                 SCAN_ACTIVE_MIN_MS, SCAN_ACTIVE_MAX_MS);
+        if (!quiet)
+            ESP_LOGI(TAG, "scan: %d network%s, %d hidden, %d-%d ms a channel",
+                     got, got == 1 ? "" : "s", hidden,
+                     SCAN_ACTIVE_MIN_MS, SCAN_ACTIVE_MAX_MS);
         /* Say so when the list was cut. The driver sorts strongest first,
          * so what is missing is the weakest -- but "not in the scan" has
          * to be told apart from "not heard". */

@@ -382,13 +382,17 @@ int wifi_ap_clients(void);
 struct esp_netif_obj *wifi_ap_netif(void);
 
 /* One scanned network, copied out. `auth` is a wifi_auth_mode_t. A
- * hidden network has `hidden` set and an empty `ssid`. */
+ * hidden network has `hidden` set and an empty `ssid`. `bssid` is the
+ * access point's MAC: what tells two networks of one name apart, and
+ * what an application placing itself by the access points it hears
+ * (aimless-moving-map's Wi-Fi location) keys them by. */
 typedef struct {
     char    ssid[33];
     int8_t  rssi;
     uint8_t auth;
     uint8_t channel;
     bool    hidden;
+    uint8_t bssid[6];
 } wifi_seen_t;
 
 /*
@@ -398,6 +402,15 @@ typedef struct {
  * about four seconds, blocking; logs each network and a summary line.
  */
 int wifi_scan_list(wifi_seen_t *out, int max);
+
+/*
+ * The same scan, without a log line for each network: for a scan made
+ * every few seconds in the background, where sixty lines each time would
+ * bury everything else. Still warns when the list was cut. Waits, as
+ * wifi_scan_list() does, for a join in progress -- most of thirty
+ * seconds at worst -- so call it from a task that can wait.
+ */
+int wifi_scan_list_quiet(wifi_seen_t *out, int max);
 
 /* "WPA2", "WPA2/WPA3", ... for a wifi_seen_t's auth. */
 const char *wifi_auth_name(uint8_t auth);
