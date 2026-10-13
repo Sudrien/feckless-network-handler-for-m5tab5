@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /* Host stand-in for NVS. See wifistoretest.c. */
 #pragma once
 #include <stdio.h>

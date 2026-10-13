@@ -34,6 +34,8 @@
  * file does not reach back into esp_hosted's archive and the link order
  * does not matter. eh_host_port_dma_free() is heap_caps_free(), which
  * takes either.
+ *
+ * SPDX-License-Identifier: MIT
  */
 #include <stdbool.h>
 #include <stddef.h>
