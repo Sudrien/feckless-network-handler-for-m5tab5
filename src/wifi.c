@@ -780,16 +780,17 @@ static int scan_list_locked(wifi_seen_t *out, int max, bool quiet)
             out[got].hidden = h;
             memcpy(out[got].bssid, ap[i].bssid, sizeof(out[got].bssid));
             if (h) hidden++;
+            /* Every row, named or not, with bytes 2-5 of its BSSID: the
+             * router, as aimless's Wi-Fi location keys it. A router's
+             * guest, mesh and second-band networks differ in the first
+             * or last byte, so rows that share these four are one box. */
             if (quiet) {
                 /* Counted, not listed. */
-            } else if (h) {
-                ESP_LOGI(TAG, "  %4d dBm  ch%-3d  %-10s  (hidden) %02x:%02x:%02x:%02x:%02x:%02x",
-                         ap[i].rssi, ap[i].primary, authmode(ap[i].authmode),
-                         ap[i].bssid[0], ap[i].bssid[1], ap[i].bssid[2],
-                         ap[i].bssid[3], ap[i].bssid[4], ap[i].bssid[5]);
             } else {
-                ESP_LOGI(TAG, "  %4d dBm  ch%-3d  %-10s  %.32s", ap[i].rssi,
-                         ap[i].primary, authmode(ap[i].authmode), out[got].ssid);
+                ESP_LOGI(TAG, "  %4d dBm  ch%-3d  %-10s  %02x:%02x:%02x:%02x  %.32s",
+                         ap[i].rssi, ap[i].primary, authmode(ap[i].authmode),
+                         ap[i].bssid[1], ap[i].bssid[2], ap[i].bssid[3], ap[i].bssid[4],
+                         h ? "(hidden)" : out[got].ssid);
             }
             got++;
         }
